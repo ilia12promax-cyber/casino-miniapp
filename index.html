@@ -59,9 +59,9 @@
     <div id="result"></div>
 
     <script>
-        // ⚠️ ВСТАВЬ СЮДА СТАРЫЙ КЛЮЧ ANON (начинается с eyJ...) ⚠️
+        // ВСТАВЬ СВОЙ СТАРЫЙ КЛЮЧ ANON (eyJ...) НИЖЕ
         const SUPABASE_URL = 'https://hhlhxmwlwegvarfoheep.supabase.co';
-        const SUPABASE_KEY = 'ВСТАВЬ_СЮДА_СТАРЫЙ_КЛЮЧ_ANON'; 
+        const SUPABASE_KEY = 'ВСТАВЬ_СЮДА_КЛЮЧ_EYJ'; 
 
         const tg = window.Telegram.WebApp;
         tg.expand();
@@ -104,9 +104,10 @@
             }
 
             if (!data) {
+                // Принудительно делаем ID числом при создании
                 let { data: newUser, error: insertError } = await db
                     .from('users')
-                    .insert([{ telegram_id: userId, balance: 30, bonus_claimed: true }])
+                    .insert([{ telegram_id: Number(userId), balance: 30, bonus_claimed: true }])
                     .select()
                     .single();
                 
@@ -119,7 +120,8 @@
                 tg.showAlert("Добро пожаловать! Тебе начислено 30 бонусных ⭐");
             }
 
-            userBalance = data.balance;
+            // Принудительно делаем баланс числом при чтении
+            userBalance = Number(data.balance);
             updateBalanceUI();
             
             spinBtn.disabled = false;
@@ -146,7 +148,7 @@
             await db
                 .from('users')
                 .update({ balance: userBalance })
-                .eq('telegram_id', userId);
+                .eq('telegram_id', Number(userId)); // Принудительно число
 
             const winningSectorIndex = Math.floor(Math.random() * sectors.length);
             const spins = 5; 
@@ -166,7 +168,7 @@
                     await db
                         .from('users')
                         .update({ balance: userBalance })
-                        .eq('telegram_id', userId);
+                        .eq('telegram_id', Number(userId));
                         
                     if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
                 } else {
