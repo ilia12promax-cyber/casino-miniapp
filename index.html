@@ -5,11 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Колесо Фортуны</title>
     
-    <!-- Скрипт Telegram -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    
-    <!-- СТАБИЛЬНАЯ ВЕРСИЯ СКРИПТА SUPABASE (UMD сборка для Safari) -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
     
     <style>
         body { margin: 0; padding: 0; background-color: #1a1a1a; color: white; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; }
@@ -62,17 +58,12 @@
     <div id="result"></div>
 
     <script>
-        // Твои ключи
+        // Твои данные
         const SUPABASE_URL = 'https://hhlhxmwlwegvarfoheep.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_ZvsBouWIg6tZQrocsDD-rA__iKXHxqe';
 
         const tg = window.Telegram.WebApp;
         tg.expand();
-        
-        // Инициализация БД (Safari больше не будет ругаться)
-        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-        });
 
         const wheel = document.getElementById('wheel');
         const spinBtn = document.getElementById('spinBtn');
@@ -88,50 +79,62 @@
         const sectors = [0, 10, 0, 2, 5, 0, 10, 5];
         const sectorAngle = 360 / sectors.length;
 
+        // Универсальная функция для запросов к базе (без библиотеки)
+        async function dbRequest(path, method = 'GET', body = null) {
+            const headers = {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': method === 'POST' ? 'return=representation' : 'return=minimal'
+            };
+            const options = { method, headers };
+            if (body) options.body = JSON.stringify(body);
+            
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, options);
+            if (!response.ok) {
+                const err = await response.text();
+                throw new Error(`HTTP ${response.status}: ${err}`);
+            }
+            const text = await response.text();
+            return text ? JSON.parse(text) : null;
+        }
+
         async function initGame() {
             userId = tg.initDataUnsafe?.user?.id;
             
             if (!userId) {
-                errorText.innerText = "Ошибка: Играйте только внутри Telegram! (Нет ID)";
+                errorText.innerText = "Ошибка: Играйте только внутри Telegram!";
                 spinBtn.innerText = "Ошибка";
                 return;
             }
 
-            // Пытаемся найти пользователя
-            let { data, error } = await db
-                .from('users')
-                .select('*')
-                .eq('telegram_id', Number(userId))
-                .single();
-
-            if (error && error.code !== 'PGRST116') {
-                errorText.innerText = "Ошибка Supabase: " + error.message;
-                spinBtn.innerText = "Ошибка БД";
-                return;
-            }
-
-            // Если пользователя нет, создаем
-            if (!data) {
-                let { data: newUser, error: insertError } = await db
-                    .from('users')
-                    .insert([{ telegram_id: Number(userId), balance: 30, bonus_claimed: true }])
-                    .select()
-                    .single();
+            try {
+                // Ищем пользователя
+                const users = await dbRequest(`users?telegram_id=eq.${userId}&select=*`);
                 
-                if (insertError) {
-                    errorText.innerText = "Ошибка создания: " + insertError.message;
-                    spinBtn.innerText = "Ошибка записи";
-                    return;
-                }
-                data = newUser;
-                tg.showAlert("Добро пожаловать! Тебе начислено 30 бонусных ⭐");
-            }
+                let data = users && users.length > 0 ? users[0] : null;
 
-            userBalance = Number(data.balance);
-            updateBalanceUI();
-            
-            spinBtn.disabled = false;
-            spinBtn.innerText = "Крутить (10 ⭐)";
+                if (!data) {
+                    // Создаем нового
+                    const newUser = await dbRequest('users', 'POST', {
+                        telegram_id: Number(userId),
+                        balance: 30,
+                        bonus_claimed: true
+                    });
+                    data = newUser[0];
+                    tg.showAlert("Добро пожаловать! Тебе начислено 30 бонусных ⭐");
+                }
+
+                userBalance = Number(data.balance);
+                updateBalanceUI();
+                
+                spinBtn.disabled = false;
+                spinBtn.innerText = "Крутить (10 ⭐)";
+
+            } catch (err) {
+                errorText.innerText = "Ошибка: " + err.message;
+                spinBtn.innerText = "Ошибка БД";
+            }
         }
 
         function updateBalanceUI() {
@@ -151,11 +154,12 @@
             userBalance -= cost;
             updateBalanceUI();
 
-            // Списываем ставку
-            await db
-                .from('users')
-                .update({ balance: userBalance })
-                .eq('telegram_id', Number(userId));
+            try {
+                // Списываем ставку
+                await dbRequest(`users?telegram_id=eq.${userId}`, 'PATCH', { balance: userBalance });
+            } catch (err) {
+                errorText.innerText = "Ошибка списания: " + err.message;
+            }
 
             const winningSectorIndex = Math.floor(Math.random() * sectors.length);
             const spins = 5; 
@@ -172,11 +176,11 @@
                     userBalance += winAmount;
                     updateBalanceUI();
                     
-                    // Начисляем выигрыш
-                    await db
-                        .from('users')
-                        .update({ balance: userBalance })
-                        .eq('telegram_id', Number(userId));
+                    try {
+                        await dbRequest(`users?telegram_id=eq.${userId}`, 'PATCH', { balance: userBalance });
+                    } catch (err) {
+                        errorText.innerText = "Ошибка начисления: " + err.message;
+                    }
                         
                     if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
                 } else {
