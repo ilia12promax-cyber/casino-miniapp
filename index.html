@@ -8,8 +8,8 @@
     <!-- Скрипт Telegram -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     
-    <!-- ИСПРАВЛЕННЫЙ СКРИПТ SUPABASE ДЛЯ SAFARI (с добавлением ?bundle) -->
-    <script src="https://esm.sh/@supabase/supabase-js@2?bundle"></script>
+    <!-- СТАБИЛЬНАЯ ВЕРСИЯ СКРИПТА SUPABASE (UMD сборка для Safari) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
     
     <style>
         body { margin: 0; padding: 0; background-color: #1a1a1a; color: white; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; }
@@ -69,7 +69,7 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
         
-        // Инициализация БД с отключенной сессией (чтобы Safari не вис)
+        // Инициализация БД (Safari больше не будет ругаться)
         const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
             auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
         });
