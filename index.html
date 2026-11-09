@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Колесо Фортуны</title>
     
-    <!-- 1. Подключаем Telegram (это обязательно!) -->
+    <!-- 1. Подключаем Telegram (обязательно!) -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <!-- 2. Подключаем базу данных Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -39,6 +39,7 @@
             border-radius: 15px;
             box-sizing: border-box;
             border: 1px solid #444;
+            z-index: 100;
         }
 
         .wheel-container {
@@ -100,6 +101,19 @@
             font-weight: bold;
             color: #ffd700;
             text-align: center;
+            z-index: 100;
+        }
+
+        /* Блок для вывода ошибок */
+        #errorText {
+            position: absolute;
+            top: 80px;
+            width: 90%;
+            color: #ff4444;
+            font-size: 12px;
+            word-break: break-all;
+            text-align: center;
+            z-index: 100;
         }
     </style>
 </head>
@@ -110,6 +124,9 @@
         <span>Баланс:</span>
         <span id="balanceDisplay">...</span> ⭐
     </div>
+    
+    <!-- Сюда будут выводиться ошибки -->
+    <div id="errorText"></div>
 
     <div class="wheel-container">
         <div class="pointer">▼</div>
@@ -143,10 +160,10 @@
 
     <script>
         // ==========================================
-        // ⚠️ ВСТАВЬ СВОИ ДАННЫЕ СЮДА:
+        // ⚠️ ТВОИ ДАННЫЕ SUPABASE
         // ==========================================
-        const SUPABASE_URL = 'https://hhlhxmwlwegvarfoheep.supabase.co'; // Например: https://hhlhxmwlwegvarfoheep.supabase.co
-        const SUPABASE_KEY = 'sb_publishable_ZvsBouWIg6tZQrocsDD-rA__iKXHxqe'; // Например: sb_publishable_ZvsBouWlgetZQrocsDD...
+        const SUPABASE_URL = 'https://hhlhxmwlwegvarfoheep.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_ZvsBouWIg6tZQrocsDD-rA__iKXHxqe';
         // ==========================================
 
         // 1. Подключение
@@ -159,14 +176,15 @@
         const spinBtn = document.getElementById('spinBtn');
         const resultDiv = document.getElementById('result');
         const balanceDisplay = document.getElementById('balanceDisplay');
+        const errorText = document.getElementById('errorText');
 
         // 3. Переменные
         let currentRotation = 0;
         let userId = null;
         let userBalance = 0;
-        const cost = 10; // Ставка (сколько списывается за игру)
+        const cost = 10;
         
-        const sectors = [0, 10, 0, 2, 5, 0, 10, 5]; // Выигрыши
+        const sectors = [0, 10, 0, 2, 5, 0, 10, 5];
         const sectorAngle = 360 / sectors.length;
 
         // 4. Функция запуска игры
@@ -174,7 +192,8 @@
             userId = tg.initDataUnsafe?.user?.id;
             
             if (!userId) {
-                resultDiv.innerText = "Ошибка: Играйте только внутри Telegram!";
+                errorText.innerText = "Ошибка: Играйте только внутри Telegram! (Нет ID)";
+                spinBtn.innerText = "Ошибка";
                 return;
             }
 
@@ -185,7 +204,14 @@
                 .eq('telegram_id', userId)
                 .single();
 
-            // Если игрока нет — создаем с балансом 30
+            // Если произошла ошибка (кроме "не найдено")
+            if (error && error.code !== 'PGRST116') {
+                errorText.innerText = "Ошибка Supabase: " + error.message;
+                spinBtn.innerText = "Ошибка БД";
+                return;
+            }
+
+            // Если игрока нет — создаем
             if (!data) {
                 let { data: newUser, error: insertError } = await supabase
                     .from('users')
@@ -194,8 +220,8 @@
                     .single();
                 
                 if (insertError) {
-                    console.error(insertError);
-                    resultDiv.innerText = "Ошибка базы данных";
+                    errorText.innerText = "Ошибка создания: " + insertError.message;
+                    spinBtn.innerText = "Ошибка записи";
                     return;
                 }
                 data = newUser;
@@ -206,12 +232,10 @@
             userBalance = data.balance;
             updateBalanceUI();
             
-            // Включаем кнопку
             spinBtn.disabled = false;
             spinBtn.innerText = "Крутить (10 ⭐)";
         }
 
-        // Функция обновления баланса на экране
         function updateBalanceUI() {
             balanceDisplay.innerText = userBalance;
         }
@@ -223,22 +247,18 @@
                 return;
             }
 
-            // Блокируем кнопку
             spinBtn.disabled = true;
             spinBtn.innerText = "Крутится...";
             resultDiv.innerText = "";
 
-            // Списываем ставку
             userBalance -= cost;
             updateBalanceUI();
 
-            // Обновляем баланс в базе (вычитаем cost)
             await supabase
                 .from('users')
                 .update({ balance: userBalance })
                 .eq('telegram_id', userId);
 
-            // Выбираем победный сектор
             const winningSectorIndex = Math.floor(Math.random() * sectors.length);
             const spins = 5; 
             const targetAngle = (spins * 360) + (360 - (winningSectorIndex * sectorAngle));
@@ -246,7 +266,6 @@
             currentRotation += targetAngle;
             wheel.style.transform = `rotate(${currentRotation}deg)`;
 
-            // Ждем окончания анимации (5 секунд)
             setTimeout(async () => {
                 const winAmount = sectors[winningSectorIndex];
                 
@@ -255,7 +274,6 @@
                     userBalance += winAmount;
                     updateBalanceUI();
                     
-                    // Обновляем баланс в базе (прибавляем выигрыш)
                     await supabase
                         .from('users')
                         .update({ balance: userBalance })
@@ -267,7 +285,6 @@
                     if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
                 }
                 
-                // Включаем кнопку обратно
                 spinBtn.disabled = false;
                 spinBtn.innerText = "Крутить (10 ⭐)";
             }, 5000);
