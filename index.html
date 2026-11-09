@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Колесо Фортуны</title>
     
+    <!-- Скрипт Telegram -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://esm.sh/@supabase/supabase-js@2"></script>
+    
+    <!-- ИСПРАВЛЕННЫЙ СКРИПТ SUPABASE ДЛЯ SAFARI (с добавлением ?bundle) -->
+    <script src="https://esm.sh/@supabase/supabase-js@2?bundle"></script>
     
     <style>
         body { margin: 0; padding: 0; background-color: #1a1a1a; color: white; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; }
@@ -59,13 +62,14 @@
     <div id="result"></div>
 
     <script>
+        // Твои ключи
         const SUPABASE_URL = 'https://hhlhxmwlwegvarfoheep.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_ZvsBouWIg6tZQrocsDD-rA__iKXHxqe';
 
         const tg = window.Telegram.WebApp;
         tg.expand();
         
-        // ТО САМОЕ ИСПРАВЛЕНИЕ ДЛЯ SAFARI (отключаем сохранение сессии)
+        // Инициализация БД с отключенной сессией (чтобы Safari не вис)
         const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
             auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
         });
@@ -93,10 +97,11 @@
                 return;
             }
 
+            // Пытаемся найти пользователя
             let { data, error } = await db
                 .from('users')
                 .select('*')
-                .eq('telegram_id', userId)
+                .eq('telegram_id', Number(userId))
                 .single();
 
             if (error && error.code !== 'PGRST116') {
@@ -105,6 +110,7 @@
                 return;
             }
 
+            // Если пользователя нет, создаем
             if (!data) {
                 let { data: newUser, error: insertError } = await db
                     .from('users')
@@ -145,6 +151,7 @@
             userBalance -= cost;
             updateBalanceUI();
 
+            // Списываем ставку
             await db
                 .from('users')
                 .update({ balance: userBalance })
@@ -165,6 +172,7 @@
                     userBalance += winAmount;
                     updateBalanceUI();
                     
+                    // Начисляем выигрыш
                     await db
                         .from('users')
                         .update({ balance: userBalance })
