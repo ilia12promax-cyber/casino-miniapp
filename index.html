@@ -59,14 +59,16 @@
     <div id="result"></div>
 
     <script>
-        // ВСТАВЬ СВОЙ СТАРЫЙ КЛЮЧ ANON (eyJ...) НИЖЕ
         const SUPABASE_URL = 'https://hhlhxmwlwegvarfoheep.supabase.co';
-        const SUPABASE_KEY = 'ВСТАВЬ_СЮДА_КЛЮЧ_EYJ'; 
+        const SUPABASE_KEY = 'sb_publishable_ZvsBouWIg6tZQrocsDD-rA__iKXHxqe';
 
         const tg = window.Telegram.WebApp;
         tg.expand();
         
-        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // ТО САМОЕ ИСПРАВЛЕНИЕ ДЛЯ SAFARI (отключаем сохранение сессии)
+        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+        });
 
         const wheel = document.getElementById('wheel');
         const spinBtn = document.getElementById('spinBtn');
@@ -104,7 +106,6 @@
             }
 
             if (!data) {
-                // Принудительно делаем ID числом при создании
                 let { data: newUser, error: insertError } = await db
                     .from('users')
                     .insert([{ telegram_id: Number(userId), balance: 30, bonus_claimed: true }])
@@ -120,7 +121,6 @@
                 tg.showAlert("Добро пожаловать! Тебе начислено 30 бонусных ⭐");
             }
 
-            // Принудительно делаем баланс числом при чтении
             userBalance = Number(data.balance);
             updateBalanceUI();
             
@@ -148,7 +148,7 @@
             await db
                 .from('users')
                 .update({ balance: userBalance })
-                .eq('telegram_id', Number(userId)); // Принудительно число
+                .eq('telegram_id', Number(userId));
 
             const winningSectorIndex = Math.floor(Math.random() * sectors.length);
             const spins = 5; 
